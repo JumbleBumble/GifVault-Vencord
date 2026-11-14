@@ -20,4 +20,4 @@ Import adds GIFs from the backup only when they're missing from Discord favorite
 
 ## Installation
 
-This is a Vencord userplugin and needs a Vencord build from source. Put this folder in `src/userplugins/gifVault`, build Vencord, enable GIF Vault in the Plugins settings, and restart Discord. See Vencord's [custom plugin instructions](https://docs.vencord.dev/installing/custom-plugins/) for details.
+This is a Vencord userplugin and needs a Vencord build from source. Put the gifVault folder in `src/userplugins`, build Vencord, enable GIF Vault in the Plugins settings, and restart Discord. See Vencord's [custom plugin instructions](https://docs.vencord.dev/installing/custom-plugins/) for details.
