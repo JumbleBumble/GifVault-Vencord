@@ -18,6 +18,7 @@ import {
     ListScrollerThin,
     Modal,
     openModal,
+    ScrollerThin,
     SearchableSelect,
     SelectedChannelStore,
     showToast,
@@ -148,7 +149,7 @@ function readLibraryData(value: unknown): GifLibraryData {
                             (folder): folder is string => typeof folder === "string",
                         )
                       : [];
-            const validFolders = [...new Set(values.filter(folder => folders.includes(folder)))];
+            const validFolders = [...new Set(values.filter((folder) => folders.includes(folder)))];
             if (validFolders.length) assignments[key] = validFolders;
         }
     }
@@ -157,15 +158,9 @@ function readLibraryData(value: unknown): GifLibraryData {
     return { folders: [...new Set(folders)], assignments, layoutSize };
 }
 
-function selectedFolderValues(value: unknown): string[] {
-    if (!Array.isArray(value)) return [];
-    return value.flatMap(item =>
-        typeof item === "string"
-            ? [item]
-            : isRecord(item) && typeof item.value === "string"
-              ? [item.value]
-              : [],
-    );
+function selectedFolderValue(value: unknown): string | undefined {
+    if (typeof value === "string") return value;
+    if (isRecord(value) && typeof value.value === "string") return value.value;
 }
 
 function getSerializableFavoriteMap() {
@@ -240,7 +235,7 @@ async function importGifVaultBackup(file: File) {
     if (Object.keys(importedFavorites).length) {
         await UserSettingsActionCreators.FrecencyUserSettingsActionCreators.updateAsync(
             "favoriteGifs",
-            current => {
+            (current) => {
                 if (!isRecord(current))
                     throw new Error("Discord's favorite GIF settings are unavailable.");
                 const gifs = isRecord(current.gifs) ? current.gifs : {};
@@ -322,7 +317,7 @@ const GifVaultBackupSettings = ErrorBoundary.wrap(
                         type="file"
                         accept="application/json,.json"
                         hidden
-                        onChange={event => void importBackup(event.currentTarget)}
+                        onChange={(event) => void importBackup(event.currentTarget)}
                     />
                 </div>
             </div>
@@ -335,7 +330,7 @@ function openGifVault() {
     const channelId = SelectedChannelStore.getChannelId();
     if (!channelId) return;
 
-    openModal(modalProps => <SafeGifVaultModal channelId={channelId} modalProps={modalProps} />);
+    openModal((modalProps) => <SafeGifVaultModal channelId={channelId} modalProps={modalProps} />);
 }
 
 function GifPreview({
@@ -356,11 +351,11 @@ function GifPreview({
 
         Promise.resolve()
             .then(() => gif.gifSrc!())
-            .then(value => {
+            .then((value) => {
                 const url = httpUrl(value);
                 if (!cancelled && url) setImageUrl(url);
             })
-            .catch(error => logger.error("Failed to resolve a favorite GIF preview", error));
+            .catch((error) => logger.error("Failed to resolve a favorite GIF preview", error));
 
         return () => {
             cancelled = true;
@@ -378,6 +373,70 @@ function GifPreview({
             alt={gif.title}
             loading="lazy"
         />
+    );
+}
+
+function GifVaultCard({
+    gif,
+    assignedFolders,
+    folders,
+    selected,
+    saving,
+    onPreview,
+    onToggleFolder,
+}: {
+    gif: FavoriteGif;
+    assignedFolders: string[];
+    folders: string[];
+    selected: boolean;
+    saving: boolean;
+    onPreview(): void;
+    onToggleFolder(folder: string): void;
+}) {
+    return (
+        <article className="vc-gif-vault-card">
+            <button
+                type="button"
+                className={`vc-gif-vault-cardPreview${selected ? " vc-gif-vault-cardSelected" : ""}`}
+                onClick={onPreview}
+                aria-label={`Preview ${gif.title} above`}
+                aria-pressed={selected}
+            >
+                <GifPreview gif={gif} compact />
+            </button>
+            <div className="vc-gif-vault-cardTitle" title={gif.title}>
+                {gif.title}
+            </div>
+            <div
+                className="vc-gif-vault-folderSelectWrapper"
+                title={assignedFolders.length ? assignedFolders.join(", ") : UNFILED}
+            >
+                <SearchableSelect
+                    className="vc-gif-vault-folderSelect"
+                    placeholder={assignedFolders.length ? assignedFolders.join(", ") : UNFILED}
+                    options={[
+                        { label: UNFILED, value: "" },
+                        ...folders.map((folder) => ({
+                            label: folder,
+                            value: folder,
+                        })),
+                    ]}
+                    value={null}
+                    onChange={(value) => {
+                        const folder = selectedFolderValue(value);
+                        if (folder !== undefined) onToggleFolder(folder);
+                    }}
+                    renderOptionPrefix={(option) =>
+                        assignedFolders.includes(option.value) ? (
+                            <span className="vc-gif-vault-folderOptionSelected">✓</span>
+                        ) : null
+                    }
+                    closeOnSelect
+                    isDisabled={saving}
+                    maxVisibleItems={6}
+                />
+            </div>
+        </article>
     );
 }
 
@@ -405,12 +464,12 @@ function GifVaultModal({
     useEffect(() => {
         let cancelled = false;
         DataStore.get<unknown>(DATA_KEY)
-            .then(value => {
+            .then((value) => {
                 if (cancelled) return;
                 setLibrary(readLibraryData(value));
                 setLoaded(true);
             })
-            .catch(error => {
+            .catch((error) => {
                 logger.error("Failed to load GIF folder data", error);
                 if (cancelled) return;
                 setLoadError(true);
@@ -429,7 +488,7 @@ function GifVaultModal({
 
     const filteredGifs = useMemo(() => {
         const query = search.trim().toLocaleLowerCase();
-        return favoriteGifs.filter(gif => {
+        return favoriteGifs.filter((gif) => {
             const assignedFolders = library.assignments[gif.key] ?? [];
             const matchesFolder =
                 !folderFilter ||
@@ -469,7 +528,7 @@ function GifVaultModal({
                 1,
                 Math.min(5, Math.floor((node.clientWidth + 12) / (tileSize.minWidth + 12))),
             );
-            setColumns(current => (current === nextColumns ? current : nextColumns));
+            setColumns((current) => (current === nextColumns ? current : nextColumns));
         });
         observer.observe(node);
 
@@ -493,7 +552,7 @@ function GifVaultModal({
         if (favoriteGifs.length === 0) return;
         const candidates =
             favoriteGifs.length > 1 && randomGif
-                ? favoriteGifs.filter(gif => gif.key !== randomGif.key)
+                ? favoriteGifs.filter((gif) => gif.key !== randomGif.key)
                 : favoriteGifs;
         setRandomGif(candidates[Math.floor(Math.random() * candidates.length)]);
     }
@@ -512,7 +571,7 @@ function GifVaultModal({
     function assignFolders(gifKey: string, folders: string[]) {
         const assignments = { ...library.assignments };
         const uniqueFolders = [
-            ...new Set(folders.filter(folder => library.folders.includes(folder))),
+            ...new Set(folders.filter((folder) => library.folders.includes(folder))),
         ];
         if (uniqueFolders.length) assignments[gifKey] = uniqueFolders;
         else delete assignments[gifKey];
@@ -525,7 +584,7 @@ function GifVaultModal({
             !name ||
             name.toLocaleLowerCase() === UNFILED.toLocaleLowerCase() ||
             library.folders.some(
-                folder => folder.toLocaleLowerCase() === name.toLocaleLowerCase(),
+                (folder) => folder.toLocaleLowerCase() === name.toLocaleLowerCase(),
             )
         )
             return;
@@ -536,12 +595,12 @@ function GifVaultModal({
     function deleteFolder(name: string) {
         const assignments: Record<string, string[]> = {};
         for (const [gifKey, folders] of Object.entries(library.assignments)) {
-            const remaining = folders.filter(folder => folder !== name);
+            const remaining = folders.filter((folder) => folder !== name);
             if (remaining.length) assignments[gifKey] = remaining;
         }
         void saveLibrary({
             ...library,
-            folders: library.folders.filter(folder => folder !== name),
+            folders: library.folders.filter((folder) => folder !== name),
             assignments,
         });
         if (folderFilter === name) setFolderFilter("");
@@ -558,7 +617,7 @@ function GifVaultModal({
             !newName ||
             newName.toLocaleLowerCase() === UNFILED.toLocaleLowerCase() ||
             library.folders.some(
-                folder =>
+                (folder) =>
                     folder !== oldName &&
                     folder.toLocaleLowerCase() === newName.toLocaleLowerCase(),
             )
@@ -568,12 +627,12 @@ function GifVaultModal({
         const assignments = Object.fromEntries(
             Object.entries(library.assignments).map(([gifKey, folders]) => [
                 gifKey,
-                folders.map(folder => (folder === oldName ? newName : folder)),
+                folders.map((folder) => (folder === oldName ? newName : folder)),
             ]),
         );
         void saveLibrary({
             ...library,
-            folders: library.folders.map(folder => (folder === oldName ? newName : folder)),
+            folders: library.folders.map((folder) => (folder === oldName ? newName : folder)),
             assignments,
         });
         if (folderFilter === oldName) setFolderFilter(newName);
@@ -585,12 +644,12 @@ function GifVaultModal({
     const canCreateFolder =
         newFolderName &&
         newFolderName !== UNFILED.toLocaleLowerCase() &&
-        !library.folders.some(folder => folder.toLocaleLowerCase() === newFolderName);
+        !library.folders.some((folder) => folder.toLocaleLowerCase() === newFolderName);
     const canRenameFolder =
         folderNameDraft.trim() &&
         folderNameDraft.trim().toLocaleLowerCase() !== UNFILED.toLocaleLowerCase() &&
         !library.folders.some(
-            folder =>
+            (folder) =>
                 folder !== editingFolder &&
                 folder.toLocaleLowerCase() === folderNameDraft.trim().toLocaleLowerCase(),
         );
@@ -672,7 +731,7 @@ function GifVaultModal({
                                 role="group"
                                 aria-label="GIF tile size"
                             >
-                                {(Object.keys(TILE_SIZES) as GifTileSize[]).map(size => (
+                                {(Object.keys(TILE_SIZES) as GifTileSize[]).map((size) => (
                                     <button
                                         key={size}
                                         type="button"
@@ -720,89 +779,100 @@ function GifVaultModal({
                             {filteredGifs.length} GIF{filteredGifs.length === 1 ? "" : "s"}
                         </span>
                     </div>
-                    <div className="vc-gif-vault-folderTabs" aria-label="Filter GIFs by folder">
-                        {[
-                            { label: "All", value: "", count: favoriteGifs.length },
-                            {
-                                label: UNFILED,
-                                value: UNFILED,
-                                count: folderCounts.get(UNFILED) ?? 0,
-                            },
-                            ...library.folders.map(folder => ({
-                                label: folder,
-                                value: folder,
-                                count: folderCounts.get(folder) ?? 0,
-                            })),
-                        ].map(folder => (
-                            <div
-                                key={folder.value || "all"}
-                                className={`vc-gif-vault-folderTab${folderFilter === folder.value ? " vc-gif-vault-folderTabSelected" : ""}`}
-                            >
-                                <button
-                                    type="button"
-                                    onClick={() => setFolderFilter(folder.value)}
-                                    aria-pressed={folderFilter === folder.value}
-                                    title={`Show ${folder.label} GIFs`}
+                    <ScrollerThin
+                        className="vc-gif-vault-folderTabs"
+                        orientation="horizontal"
+                        fade={false}
+                    >
+                        <div
+                            className="vc-gif-vault-folderTabList"
+                            aria-label="Filter GIFs by folder"
+                        >
+                            {[
+                                { label: "All", value: "", count: favoriteGifs.length },
+                                {
+                                    label: UNFILED,
+                                    value: UNFILED,
+                                    count: folderCounts.get(UNFILED) ?? 0,
+                                },
+                                ...library.folders.map((folder) => ({
+                                    label: folder,
+                                    value: folder,
+                                    count: folderCounts.get(folder) ?? 0,
+                                })),
+                            ].map((folder) => (
+                                <div
+                                    key={folder.value || "all"}
+                                    className={`vc-gif-vault-folderTab${folderFilter === folder.value ? " vc-gif-vault-folderTabSelected" : ""}`}
                                 >
-                                    <span>{folder.label}</span>
-                                    <span className="vc-gif-vault-folderCount">{folder.count}</span>
-                                </button>
-                                {library.folders.includes(folder.value) &&
-                                    (editingFolder === folder.value ? (
-                                        <>
-                                            <TextInput
-                                                value={folderNameDraft}
-                                                onChange={setFolderNameDraft}
-                                                placeholder="Folder name"
-                                                maxLength={32}
-                                                inputClassName="vc-gif-vault-renameInput"
-                                            />
-                                            <button
-                                                type="button"
-                                                className="vc-gif-vault-folderAction"
-                                                aria-label={`Save ${folder.label} folder name`}
-                                                onClick={() => renameFolder(folder.value)}
-                                                disabled={!canRenameFolder || saving}
-                                            >
-                                                ✓
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="vc-gif-vault-folderAction"
-                                                aria-label="Cancel folder rename"
-                                                onClick={() => setEditingFolder(undefined)}
-                                                disabled={saving}
-                                            >
-                                                ×
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            className="vc-gif-vault-folderAction"
-                                            aria-label={`Rename ${folder.label} folder`}
-                                            title={`Rename ${folder.label}`}
-                                            onClick={() => beginRenameFolder(folder.value)}
-                                            disabled={saving}
-                                        >
-                                            ✎
-                                        </button>
-                                    ))}
-                                {library.folders.includes(folder.value) && (
                                     <button
                                         type="button"
-                                        className="vc-gif-vault-deleteFolder"
-                                        aria-label={`Delete ${folder.label} folder`}
-                                        title={`Delete ${folder.label} folder`}
-                                        onClick={() => deleteFolder(folder.value)}
-                                        disabled={saving}
+                                        onClick={() => setFolderFilter(folder.value)}
+                                        aria-pressed={folderFilter === folder.value}
+                                        title={`Show ${folder.label} GIFs`}
                                     >
-                                        ×
+                                        <span>{folder.label}</span>
+                                        <span className="vc-gif-vault-folderCount">
+                                            {folder.count}
+                                        </span>
                                     </button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                                    {library.folders.includes(folder.value) &&
+                                        (editingFolder === folder.value ? (
+                                            <>
+                                                <TextInput
+                                                    value={folderNameDraft}
+                                                    onChange={setFolderNameDraft}
+                                                    placeholder="Folder name"
+                                                    maxLength={32}
+                                                    inputClassName="vc-gif-vault-renameInput"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="vc-gif-vault-folderAction"
+                                                    aria-label={`Save ${folder.label} folder name`}
+                                                    onClick={() => renameFolder(folder.value)}
+                                                    disabled={!canRenameFolder || saving}
+                                                >
+                                                    ✓
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="vc-gif-vault-folderAction"
+                                                    aria-label="Cancel folder rename"
+                                                    onClick={() => setEditingFolder(undefined)}
+                                                    disabled={saving}
+                                                >
+                                                    ×
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                className="vc-gif-vault-folderAction"
+                                                aria-label={`Rename ${folder.label} folder`}
+                                                title={`Rename ${folder.label}`}
+                                                onClick={() => beginRenameFolder(folder.value)}
+                                                disabled={saving}
+                                            >
+                                                ✎
+                                            </button>
+                                        ))}
+                                    {library.folders.includes(folder.value) && (
+                                        <button
+                                            type="button"
+                                            className="vc-gif-vault-deleteFolder"
+                                            aria-label={`Delete ${folder.label} folder`}
+                                            title={`Delete ${folder.label} folder`}
+                                            onClick={() => deleteFolder(folder.value)}
+                                            disabled={saving}
+                                        >
+                                            ×
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollerThin>
 
                     {!loaded ? (
                         <p className="vc-gif-vault-empty">Loading your GIF folders…</p>
@@ -810,10 +880,15 @@ function GifVaultModal({
                         <div className="vc-gif-vault-gridScroller" ref={gridRef}>
                             <ListScrollerThin
                                 className="vc-gif-vault-gridScrollerInner"
+                                innerClassName="vc-gif-vault-gridContent"
                                 sections={[gifRows.length]}
                                 sectionHeight={0}
                                 rowHeight={tileSize.rowHeight}
                                 chunkSize={chunkSize}
+                                paddingTop={0}
+                                paddingBottom={0}
+                                style={{ overflowAnchor: "none" }}
+                                getAnchorId={({ section, row }) => `${section}:${row}`}
                                 renderSection={() => null}
                                 renderRow={({ row }) => (
                                     <div
@@ -823,50 +898,30 @@ function GifVaultModal({
                                             gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
                                         }}
                                     >
-                                        {gifRows[row].map(gif => (
-                                            <article className="vc-gif-vault-card" key={gif.key}>
-                                                <button
-                                                    type="button"
-                                                    className={`vc-gif-vault-cardPreview${randomGif?.key === gif.key ? " vc-gif-vault-cardSelected" : ""}`}
-                                                    onClick={() => setRandomGif(gif)}
-                                                    aria-label={`Preview ${gif.title} above`}
-                                                    aria-pressed={randomGif?.key === gif.key}
-                                                >
-                                                    <GifPreview gif={gif} compact />
-                                                </button>
-                                                <div
-                                                    className="vc-gif-vault-cardTitle"
-                                                    title={gif.title}
-                                                >
-                                                    {gif.title}
-                                                </div>
-                                                <SearchableSelect
-                                                    placeholder={
-                                                        library.assignments[gif.key]?.length
-                                                            ? "Folders"
-                                                            : UNFILED
-                                                    }
-                                                    options={[
-                                                        { label: UNFILED, value: "" },
-                                                        ...library.folders.map(folder => ({
-                                                            label: folder,
-                                                            value: folder,
-                                                        })),
-                                                    ]}
-                                                    value={library.assignments[gif.key] ?? []}
-                                                    onChange={value => {
-                                                        const folders = selectedFolderValues(value);
-                                                        assignFolders(
-                                                            gif.key,
-                                                            folders.includes("") ? [] : folders,
-                                                        );
-                                                    }}
-                                                    multi
-                                                    closeOnSelect={false}
-                                                    isDisabled={saving}
-                                                    maxVisibleItems={6}
-                                                />
-                                            </article>
+                                        {gifRows[row].map((gif) => (
+                                            <GifVaultCard
+                                                key={gif.key}
+                                                gif={gif}
+                                                assignedFolders={library.assignments[gif.key] ?? []}
+                                                folders={library.folders}
+                                                selected={randomGif?.key === gif.key}
+                                                saving={saving}
+                                                onPreview={() => setRandomGif(gif)}
+                                                onToggleFolder={(folder) => {
+                                                    const assigned =
+                                                        library.assignments[gif.key] ?? [];
+                                                    assignFolders(
+                                                        gif.key,
+                                                        folder === ""
+                                                            ? []
+                                                            : assigned.includes(folder)
+                                                              ? assigned.filter(
+                                                                    (name) => name !== folder,
+                                                                )
+                                                              : [...assigned, folder],
+                                                    );
+                                                }}
+                                            />
                                         ))}
                                     </div>
                                 )}

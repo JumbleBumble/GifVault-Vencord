@@ -205,31 +205,19 @@
 }
 
 .vc-gif-vault-folderTabs {
+    flex: none;
+    height: 44px;
+    margin-bottom: 14px;
+    width: 100%;
+}
+
+.vc-gif-vault-folderTabList {
     border-bottom: 1px solid var(--background-modifier-accent);
     display: flex;
     gap: 6px;
-    margin-bottom: 14px;
-    overflow-x: auto;
+    min-width: 100%;
     padding-bottom: 10px;
-    scrollbar-color: var(--background-modifier-accent) transparent;
-    scrollbar-width: thin;
-}
-
-.vc-gif-vault-folderTabs::-webkit-scrollbar {
-    height: 6px;
-}
-
-.vc-gif-vault-folderTabs::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.vc-gif-vault-folderTabs::-webkit-scrollbar-thumb {
-    background: var(--background-modifier-accent);
-    border-radius: 3px;
-}
-
-.vc-gif-vault-folderTabs::-webkit-scrollbar-thumb:hover {
-    background: var(--interactive-muted);
+    width: max-content;
 }
 
 .vc-gif-vault-folderTab {
@@ -303,11 +291,17 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    overflow-anchor: none;
 }
 
 .vc-gif-vault-gridScrollerInner {
     height: 100%;
     min-height: 0;
+    overflow-anchor: none;
+}
+
+.vc-gif-vault-gridContent,
+.vc-gif-vault-gridRow {
     overflow-anchor: none;
 }
 
@@ -363,6 +357,43 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.vc-gif-vault-folderSelectWrapper {
+    min-width: 0;
+    width: 100%;
+}
+
+.vc-gif-vault-folderSelect {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    width: 100%;
+}
+
+.vc-gif-vault-folderSelect [class*="control"],
+.vc-gif-vault-folderSelect [class*="valueContainer"] {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.vc-gif-vault-folderSelect [class*="placeholder"],
+.vc-gif-vault-folderSelect [class*="singleValue"] {
+    color: var(--text-normal);
+    display: block;
+    flex: 1 1 auto;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-gif-vault-folderOptionSelected {
+    color: var(--status-positive);
+    display: inline-block;
+    text-align: center;
+    width: 18px;
 }
 
 .vc-gif-vault-empty {
