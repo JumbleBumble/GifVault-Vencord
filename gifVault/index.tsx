@@ -10,13 +10,14 @@ import * as DataStore from "@api/DataStore";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Paragraph } from "@components/Paragraph";
-import { sendMessage } from "@utils/discord";
+import { confirmAction, sendMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { RenderModalProps } from "@vencord/discord-types";
 import {
     ListScrollerThin,
     Modal,
+    openMediaModal,
     openModal,
     ScrollerThin,
     SearchableSelect,
@@ -39,28 +40,47 @@ const UNFILED = "Unfiled";
 const BACKUP_VERSION = 1;
 
 const TILE_SIZES = {
-    small: { label: "Small", minWidth: 142, rowHeight: 188 },
-    medium: { label: "Medium", minWidth: 202, rowHeight: 222 },
-    large: { label: "Large", minWidth: 282, rowHeight: 262 },
+    small: { label: "Small", minWidth: 202, rowHeight: 222 },
+    medium: { label: "Medium", minWidth: 282, rowHeight: 262 },
+    large: { label: "Large", minWidth: 380, rowHeight: 310 },
 } as const;
 
 type GifTileSize = keyof typeof TILE_SIZES;
+type GifSortOrder = "added-oldest" | "added-newest" | "title-asc" | "title-desc";
+
+function isGifSortOrder(value: string): value is GifSortOrder {
+    return (
+        value === "added-oldest" ||
+        value === "added-newest" ||
+        value === "title-asc" ||
+        value === "title-desc"
+    );
+}
 
 interface FavoriteGif {
     key: string;
     title: string;
     url: string;
     previewUrl: string;
+    format: number;
+    width?: number;
+    height?: number;
     gifSrc?: () => unknown;
 }
 
 interface GifLibraryData {
     folders: string[];
     assignments: Record<string, string[]>;
+    titleOverrides: Record<string, string>;
     layoutSize: GifTileSize;
 }
 
-const EMPTY_LIBRARY: GifLibraryData = { folders: [], assignments: {}, layoutSize: "small" };
+const EMPTY_LIBRARY: GifLibraryData = {
+    folders: [],
+    assignments: {},
+    titleOverrides: {},
+    layoutSize: "small",
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -84,7 +104,7 @@ function getFavorites(): FavoriteGif[] {
         | undefined;
     if (!favoriteGifs?.gifs) return [];
 
-    return Object.entries(favoriteGifs.gifs).flatMap(([key, value]) => {
+    const favorites = Object.entries(favoriteGifs.gifs).flatMap(([key, value], fallbackOrder) => {
         if (!isRecord(value)) return [];
 
         const url =
@@ -93,8 +113,8 @@ function getFavorites(): FavoriteGif[] {
             httpUrl(value.src) ?? httpUrl(value.url) ?? httpUrl(value.gifSrc) ?? httpUrl(key);
         if (!url || !previewUrl) return [];
 
-        return [
-            {
+        return [{
+            gif: {
                 key,
                 title:
                     typeof value.title === "string" && value.title
@@ -104,13 +124,35 @@ function getFavorites(): FavoriteGif[] {
                           : new URL(url).hostname,
                 url,
                 previewUrl,
+                format: value.format === 2 ? 2 : 1,
+                width:
+                    typeof value.width === "number" && Number.isFinite(value.width)
+                        ? value.width
+                        : undefined,
+                height:
+                    typeof value.height === "number" && Number.isFinite(value.height)
+                        ? value.height
+                        : undefined,
                 gifSrc:
                     typeof value.gifSrc === "function"
                         ? (value.gifSrc as () => unknown)
                         : undefined,
             },
-        ];
+            fallbackOrder,
+            order:
+                typeof value.order === "number" && Number.isFinite(value.order)
+                    ? value.order
+                    : undefined,
+        }];
     });
+
+    const hasNativeOrder = favorites.every(({ order }) => order !== undefined);
+    favorites.sort((a, b) =>
+        hasNativeOrder
+            ? a.order! - b.order! || a.fallbackOrder - b.fallbackOrder
+            : a.fallbackOrder - b.fallbackOrder,
+    );
+    return favorites.map(({ gif }) => gif);
 }
 
 function getNativeFavoriteMap(): Record<string, unknown> {
@@ -153,9 +195,23 @@ function readLibraryData(value: unknown): GifLibraryData {
             if (validFolders.length) assignments[key] = validFolders;
         }
     }
+    const titleOverrides: Record<string, string> = {};
+    if (isRecord(value.titleOverrides)) {
+        for (const [key, title] of Object.entries(value.titleOverrides)) {
+            if (
+                key === "__proto__" ||
+                key === "constructor" ||
+                key === "prototype" ||
+                typeof title !== "string"
+            )
+                continue;
+            const trimmedTitle = title.trim();
+            if (trimmedTitle) titleOverrides[key] = trimmedTitle;
+        }
+    }
     const layoutSize =
         value.layoutSize === "medium" || value.layoutSize === "large" ? value.layoutSize : "small";
-    return { folders: [...new Set(folders)], assignments, layoutSize };
+    return { folders: [...new Set(folders)], assignments, titleOverrides, layoutSize };
 }
 
 function selectedFolderValue(value: unknown): string | undefined {
@@ -382,16 +438,30 @@ function GifVaultCard({
     folders,
     selected,
     saving,
+    editing,
+    titleDraft,
     onPreview,
     onToggleFolder,
+    onTitleDraftChange,
+    onStartRename,
+    onSaveRename,
+    onCancelRename,
+    onDelete,
 }: {
     gif: FavoriteGif;
     assignedFolders: string[];
     folders: string[];
     selected: boolean;
     saving: boolean;
+    editing: boolean;
+    titleDraft: string;
     onPreview(): void;
     onToggleFolder(folder: string): void;
+    onTitleDraftChange(value: string): void;
+    onStartRename(): void;
+    onSaveRename(): void;
+    onCancelRename(): void;
+    onDelete(): void;
 }) {
     return (
         <article className="vc-gif-vault-card">
@@ -404,8 +474,64 @@ function GifVaultCard({
             >
                 <GifPreview gif={gif} compact />
             </button>
-            <div className="vc-gif-vault-cardTitle" title={gif.title}>
-                {gif.title}
+            <div className="vc-gif-vault-cardTitleRow">
+                {editing ? (
+                    <>
+                        <TextInput
+                            value={titleDraft}
+                            onChange={onTitleDraftChange}
+                            placeholder="GIF title"
+                            maxLength={100}
+                            inputClassName="vc-gif-vault-titleInput"
+                        />
+                        <button
+                            type="button"
+                            className="vc-gif-vault-cardAction"
+                            aria-label={`Save ${gif.title} title`}
+                            title="Save title"
+                            onClick={onSaveRename}
+                            disabled={!titleDraft.trim() || saving}
+                        >
+                            ✓
+                        </button>
+                        <button
+                            type="button"
+                            className="vc-gif-vault-cardAction"
+                            aria-label="Cancel GIF rename"
+                            title="Cancel"
+                            onClick={onCancelRename}
+                            disabled={saving}
+                        >
+                            ×
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <span className="vc-gif-vault-cardTitle" title={gif.title}>
+                            {gif.title}
+                        </span>
+                        <button
+                            type="button"
+                            className="vc-gif-vault-cardAction"
+                            aria-label={`Rename ${gif.title}`}
+                            title={`Rename ${gif.title}`}
+                            onClick={onStartRename}
+                            disabled={saving}
+                        >
+                            ✎
+                        </button>
+                        <button
+                            type="button"
+                            className="vc-gif-vault-cardAction vc-gif-vault-cardDelete"
+                            aria-label={`Remove ${gif.title} from favorites`}
+                            title="Remove from favorites"
+                            onClick={onDelete}
+                            disabled={saving}
+                        >
+                            ×
+                        </button>
+                    </>
+                )}
             </div>
             <div
                 className="vc-gif-vault-folderSelectWrapper"
@@ -453,9 +579,12 @@ function GifVaultModal({
     const [loadError, setLoadError] = useState(false);
     const [search, setSearch] = useState("");
     const [folderFilter, setFolderFilter] = useState("");
+    const [sortOrder, setSortOrder] = useState<GifSortOrder>("added-oldest");
     const [newFolder, setNewFolder] = useState("");
     const [editingFolder, setEditingFolder] = useState<string>();
     const [folderNameDraft, setFolderNameDraft] = useState("");
+    const [editingGifKey, setEditingGifKey] = useState<string>();
+    const [gifTitleDraft, setGifTitleDraft] = useState("");
     const [randomGif, setRandomGif] = useState<FavoriteGif>();
     const [saving, setSaving] = useState(false);
     const [columns, setColumns] = useState(5);
@@ -482,13 +611,24 @@ function GifVaultModal({
     }, []);
 
     useEffect(() => {
-        if (!randomGif && favoriteGifs.length > 0)
+        if (favoriteGifs.length === 0) {
+            setRandomGif(undefined);
+        } else if (!randomGif || !favoriteGifs.some((gif) => gif.key === randomGif.key)) {
             setRandomGif(favoriteGifs[Math.floor(Math.random() * favoriteGifs.length)]);
+        }
     }, [favoriteGifs, randomGif]);
 
+    const titledGifs = useMemo(
+        () =>
+            favoriteGifs.map((gif) => ({
+                ...gif,
+                title: library.titleOverrides[gif.key] ?? gif.title,
+            })),
+        [favoriteGifs, library.titleOverrides],
+    );
     const filteredGifs = useMemo(() => {
         const query = search.trim().toLocaleLowerCase();
-        return favoriteGifs.filter((gif) => {
+        const filtered = titledGifs.filter((gif) => {
             const assignedFolders = library.assignments[gif.key] ?? [];
             const matchesFolder =
                 !folderFilter ||
@@ -499,7 +639,21 @@ function GifVaultModal({
                 !query || `${gif.title} ${gif.url}`.toLocaleLowerCase().includes(query);
             return matchesFolder && matchesSearch;
         });
-    }, [favoriteGifs, folderFilter, library.assignments, search]);
+        if (sortOrder === "added-newest") return filtered.reverse();
+        if (sortOrder === "added-oldest") return filtered;
+
+        return filtered.sort((a, b) =>
+            sortOrder === "title-asc"
+                ? a.title.localeCompare(b.title, undefined, {
+                      numeric: true,
+                      sensitivity: "base",
+                  })
+                : b.title.localeCompare(a.title, undefined, {
+                      numeric: true,
+                      sensitivity: "base",
+                  }),
+        );
+    }, [folderFilter, library.assignments, search, sortOrder, titledGifs]);
     const gifRows = useMemo(() => {
         const rows: FavoriteGif[][] = [];
         for (let i = 0; i < filteredGifs.length; i += columns)
@@ -524,10 +678,16 @@ function GifVaultModal({
         if (!node) return;
 
         const observer = new ResizeObserver(() => {
-            const nextColumns = Math.max(
-                1,
-                Math.min(5, Math.floor((node.clientWidth + 12) / (tileSize.minWidth + 12))),
-            );
+            const nextColumns =
+                library.layoutSize === "large"
+                    ? 2
+                    : Math.max(
+                          1,
+                          Math.min(
+                              5,
+                              Math.floor((node.clientWidth + 12) / (tileSize.minWidth + 12)),
+                          ),
+                      );
             setColumns((current) => (current === nextColumns ? current : nextColumns));
         });
         observer.observe(node);
@@ -541,7 +701,7 @@ function GifVaultModal({
             await DataStore.set(DATA_KEY, next);
             setLibrary(next);
         } catch (error) {
-            logger.error("Failed to save GIF folder data", error);
+            logger.error("Failed to save GIF Vault library data", error);
             setLoadError(true);
         } finally {
             setSaving(false);
@@ -568,6 +728,31 @@ function GifVaultModal({
         }
     }
 
+    async function openFullscreenPreview(gif: FavoriteGif) {
+        try {
+            const url = await getGifUrl(gif);
+            openMediaModal({
+                items: [
+                    {
+                        type: gif.format === 2 ? "VIDEO" : "IMAGE",
+                        url,
+                        original: url,
+                        alt: gif.title,
+                        width: gif.width ?? 800,
+                        height: gif.height ?? 600,
+                        animated: gif.format === 2,
+                    },
+                ],
+            });
+        } catch (error) {
+            logger.error("Failed to open a favorite GIF preview", error);
+            showToast({
+                text: "Failed to open the GIF preview. Check the Vencord console for details.",
+                variant: "critical",
+            });
+        }
+    }
+
     function assignFolders(gifKey: string, folders: string[]) {
         const assignments = { ...library.assignments };
         const uniqueFolders = [
@@ -576,6 +761,82 @@ function GifVaultModal({
         if (uniqueFolders.length) assignments[gifKey] = uniqueFolders;
         else delete assignments[gifKey];
         void saveLibrary({ ...library, assignments });
+    }
+
+    function saveGifTitle(gifKey: string) {
+        const title = gifTitleDraft.trim();
+        if (!title) return;
+
+        const originalTitle = favoriteGifs.find((gif) => gif.key === gifKey)?.title;
+        const titleOverrides = { ...library.titleOverrides };
+        if (title === originalTitle) delete titleOverrides[gifKey];
+        else titleOverrides[gifKey] = title;
+
+        void saveLibrary({ ...library, titleOverrides });
+        setEditingGifKey(undefined);
+        setGifTitleDraft("");
+    }
+
+    async function removeFavorite(gif: FavoriteGif) {
+        setSaving(true);
+        try {
+            await UserSettingsActionCreators.FrecencyUserSettingsActionCreators.updateAsync(
+                "favoriteGifs",
+                (current) => {
+                    if (!isRecord(current) || !isRecord(current.gifs))
+                        throw new Error("Discord's favorite GIF settings are unavailable.");
+                    delete current.gifs[gif.key];
+                },
+                0,
+            );
+        } catch (error) {
+            logger.error("Failed to remove a favorite GIF", error);
+            showToast({
+                text: "Failed to remove the GIF from favorites. Check the Vencord console for details.",
+                variant: "critical",
+            });
+            setSaving(false);
+            return;
+        }
+
+        const assignments = { ...library.assignments };
+        const titleOverrides = { ...library.titleOverrides };
+        delete assignments[gif.key];
+        delete titleOverrides[gif.key];
+        const nextLibrary = { ...library, assignments, titleOverrides };
+        try {
+            await DataStore.set(DATA_KEY, nextLibrary);
+            setLibrary(nextLibrary);
+            showToast({ text: "GIF removed from favorites.", variant: "success" });
+        } catch (error) {
+            logger.error("Removed a favorite GIF but failed to clear its GIF Vault metadata", error);
+            setLoadError(true);
+            showToast({
+                text: "The GIF was removed from favorites, but its GIF Vault data could not be cleared.",
+                variant: "critical",
+            });
+        } finally {
+            setSaving(false);
+            if (editingGifKey === gif.key) {
+                setEditingGifKey(undefined);
+                setGifTitleDraft("");
+            }
+        }
+    }
+
+    function confirmRemoveFavorite(gif: FavoriteGif) {
+        void confirmAction({
+            title: `Remove ${gif.title} from favorites?`,
+            subtitle: "This removes the GIF from your Discord favorites and cannot be undone here.",
+            confirmText: "Remove favorite",
+            onConfirm: () => removeFavorite(gif),
+        }).catch((error) => {
+            logger.error("Failed to confirm favorite GIF removal", error);
+            showToast({
+                text: "Failed to remove the GIF from favorites. Check the Vencord console for details.",
+                variant: "critical",
+            });
+        });
     }
 
     function createFolder() {
@@ -654,11 +915,13 @@ function GifVaultModal({
                 folder.toLocaleLowerCase() === folderNameDraft.trim().toLocaleLowerCase(),
         );
     const chunkSize = Math.max(1, Math.ceil(18 / columns));
+    const randomDisplayGif = randomGif
+        ? (titledGifs.find((gif) => gif.key === randomGif.key) ?? randomGif)
+        : undefined;
     return (
         <Modal
             {...modalProps}
             title="GIF Vault"
-            subtitle="Organize your Discord favorites, find the right GIF, and preview it before posting."
             size="xl"
             actions={[{ text: "Done", variant: "secondary", onClick: modalProps.onClose }]}
         >
@@ -672,21 +935,32 @@ function GifVaultModal({
 
                 <section className="vc-gif-vault-random">
                     <div className="vc-gif-vault-randomPreview">
-                        {randomGif ? (
-                            <GifPreview key={randomGif.key} gif={randomGif} resolveGifSrc />
+                        {randomDisplayGif ? (
+                            <button
+                                type="button"
+                                className="vc-gif-vault-fullscreenPreview"
+                                aria-label={`View ${randomDisplayGif.title} fullscreen`}
+                                title="View fullscreen"
+                                onClick={() => void openFullscreenPreview(randomDisplayGif)}
+                            >
+                                <GifPreview
+                                    gif={randomDisplayGif}
+                                    resolveGifSrc
+                                />
+                            </button>
                         ) : (
                             <div className="vc-gif-vault-previewPlaceholder" aria-hidden="true">
                                 GIF
                             </div>
                         )}
                         <div className="vc-gif-vault-randomInfo">
-                            <h3>Random pick</h3>
-                            <p>Roll a favorite, preview it, then send it to the current chat.</p>
-                            {randomGif ? (
+                            <h3>Random GIF</h3>
+                            {randomDisplayGif ? (
                                 <>
-                                    <strong>{randomGif.title}</strong>
+                                    <strong>{randomDisplayGif.title}</strong>
                                     <span className="vc-gif-vault-folderLabel">
-                                        {library.assignments[randomGif.key]?.join(", ") || UNFILED}
+                                        {library.assignments[randomDisplayGif.key]?.join(", ") ||
+                                            UNFILED}
                                     </span>
                                 </>
                             ) : (
@@ -702,7 +976,7 @@ function GifVaultModal({
                                     onClick={rollRandom}
                                     disabled={!favoriteGifs.length}
                                 >
-                                    {randomGif ? "Reroll" : "Pick a favorite"}
+                                    {randomDisplayGif ? "Reroll" : "Pick a favorite"}
                                 </Button>
                                 <Button
                                     variant="primary"
@@ -775,6 +1049,25 @@ function GifVaultModal({
                             placeholder="Search by title or source"
                             aria-label="Search favorite GIFs"
                         />
+                        <div className="vc-gif-vault-sortWrapper">
+                            <SearchableSelect
+                                className="vc-gif-vault-sort"
+                                value={sortOrder}
+                                placeholder="Sort favorites"
+                                options={[
+                                    { label: "Oldest added", value: "added-oldest" },
+                                    { label: "Newest added", value: "added-newest" },
+                                    { label: "Title A–Z", value: "title-asc" },
+                                    { label: "Title Z–A", value: "title-desc" },
+                                ]}
+                                onChange={value => {
+                                    if (typeof value === "string" && isGifSortOrder(value))
+                                        setSortOrder(value);
+                                }}
+                                closeOnSelect
+                                maxVisibleItems={4}
+                            />
+                        </div>
                         <span className="vc-gif-vault-count">
                             {filteredGifs.length} GIF{filteredGifs.length === 1 ? "" : "s"}
                         </span>
@@ -879,6 +1172,7 @@ function GifVaultModal({
                     ) : filteredGifs.length ? (
                         <div className="vc-gif-vault-gridScroller" ref={gridRef}>
                             <ListScrollerThin
+                                key={sortOrder}
                                 className="vc-gif-vault-gridScrollerInner"
                                 innerClassName="vc-gif-vault-gridContent"
                                 sections={[gifRows.length]}
@@ -906,6 +1200,8 @@ function GifVaultModal({
                                                 folders={library.folders}
                                                 selected={randomGif?.key === gif.key}
                                                 saving={saving}
+                                                editing={editingGifKey === gif.key}
+                                                titleDraft={gifTitleDraft}
                                                 onPreview={() => setRandomGif(gif)}
                                                 onToggleFolder={(folder) => {
                                                     const assigned =
@@ -921,6 +1217,17 @@ function GifVaultModal({
                                                               : [...assigned, folder],
                                                     );
                                                 }}
+                                                onTitleDraftChange={setGifTitleDraft}
+                                                onStartRename={() => {
+                                                    setEditingGifKey(gif.key);
+                                                    setGifTitleDraft(gif.title);
+                                                }}
+                                                onSaveRename={() => saveGifTitle(gif.key)}
+                                                onCancelRename={() => {
+                                                    setEditingGifKey(undefined);
+                                                    setGifTitleDraft("");
+                                                }}
+                                                onDelete={() => confirmRemoveFavorite(gif)}
                                             />
                                         ))}
                                     </div>

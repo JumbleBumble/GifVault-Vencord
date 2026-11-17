@@ -5,8 +5,8 @@
 
 .vc-gif-vault {
     box-sizing: border-box;
-    --vc-gif-vault-row-height: 188px;
-    --vc-gif-vault-preview-height: 96px;
+    --vc-gif-vault-row-height: 222px;
+    --vc-gif-vault-preview-height: 130px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -17,13 +17,13 @@
 }
 
 .vc-gif-vault-medium {
-    --vc-gif-vault-row-height: 222px;
-    --vc-gif-vault-preview-height: 130px;
+    --vc-gif-vault-row-height: 262px;
+    --vc-gif-vault-preview-height: 170px;
 }
 
 .vc-gif-vault-large {
-    --vc-gif-vault-row-height: 262px;
-    --vc-gif-vault-preview-height: 170px;
+    --vc-gif-vault-row-height: 310px;
+    --vc-gif-vault-preview-height: 200px;
 }
 
 .vc-gif-vault-random,
@@ -33,6 +33,10 @@
     border: 1px solid var(--background-modifier-accent);
     border-radius: 10px;
     padding: 16px;
+}
+
+.vc-gif-vault-random {
+    width: 100%;
 }
 
 .vc-gif-vault-library {
@@ -61,10 +65,28 @@
 .vc-gif-vault-previewPlaceholder {
     background: var(--background-tertiary);
     border-radius: 8px;
-    flex: 0 0 240px;
-    height: 144px;
+    flex: 0 0 340px;
+    height: 180px;
     object-fit: contain;
-    width: 240px;
+    width: 340px;
+}
+
+.vc-gif-vault-fullscreenPreview {
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: zoom-in;
+    flex: 0 0 340px;
+    height: 180px;
+    overflow: hidden;
+    padding: 0;
+    width: 340px;
+}
+
+.vc-gif-vault-fullscreenPreview:hover,
+.vc-gif-vault-fullscreenPreview:focus-visible {
+    outline: 2px solid var(--brand-500);
+    outline-offset: -2px;
 }
 
 .vc-gif-vault-previewCompact {
@@ -100,7 +122,6 @@
     margin: 0;
 }
 
-.vc-gif-vault-randomInfo p,
 .vc-gif-vault-libraryHeading span {
     color: var(--text-muted);
     font-size: 12px;
@@ -191,6 +212,40 @@
 .vc-gif-vault-libraryTools > :first-child {
     flex: 1;
     min-width: 120px;
+}
+
+.vc-gif-vault-sortWrapper {
+    box-sizing: border-box;
+    flex: 0 0 240px;
+    max-width: 100%;
+    min-width: 0;
+    width: 240px;
+}
+
+.vc-gif-vault-sort {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    width: 100%;
+}
+
+.vc-gif-vault-sort [class*="control"],
+.vc-gif-vault-sort [class*="valueContainer"] {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.vc-gif-vault-sort [class*="placeholder"],
+.vc-gif-vault-sort [class*="singleValue"] {
+    color: var(--text-normal);
+    display: block;
+    flex: 1 1 auto;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .vc-gif-vault-libraryTools {
@@ -351,12 +406,52 @@
     outline-offset: -2px;
 }
 
+.vc-gif-vault-cardTitleRow {
+    align-items: center;
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+}
+
 .vc-gif-vault-cardTitle {
     color: var(--header-primary);
+    flex: 1;
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.vc-gif-vault-cardAction {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: var(--interactive-normal);
+    cursor: pointer;
+    flex: none;
+    font: inherit;
+    line-height: 20px;
+    padding: 0 4px;
+}
+
+.vc-gif-vault-cardAction:hover {
+    background: var(--background-modifier-hover);
+    color: var(--interactive-hover);
+}
+
+.vc-gif-vault-cardAction:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.vc-gif-vault-cardDelete:hover {
+    color: var(--status-danger);
+}
+
+.vc-gif-vault-titleInput {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
 }
 
 .vc-gif-vault-folderSelectWrapper {
@@ -450,6 +545,15 @@
     .vc-gif-vault-previewPlaceholder {
         flex-basis: auto;
         width: 100%;
+    }
+
+    .vc-gif-vault-fullscreenPreview {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    .vc-gif-vault-libraryTools {
+        flex-wrap: wrap;
     }
 
     .vc-gif-vault-random {
