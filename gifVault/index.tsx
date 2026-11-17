@@ -15,10 +15,13 @@ import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { RenderModalProps } from "@vencord/discord-types";
 import {
+    FluxDispatcher,
     ListScrollerThin,
+    MessageActions,
     Modal,
     openMediaModal,
     openModal,
+    PendingReplyStore,
     ScrollerThin,
     SearchableSelect,
     SelectedChannelStore,
@@ -574,6 +577,10 @@ function GifVaultModal({
     modalProps: RenderModalProps;
 }) {
     const favoriteGifs = useStateFromStores([UserSettingsProtoStore], getFavorites);
+    const pendingReply = useStateFromStores(
+        [PendingReplyStore],
+        () => PendingReplyStore.getPendingReply(channelId),
+    );
     const [library, setLibrary] = useState<GifLibraryData>(EMPTY_LIBRARY);
     const [loaded, setLoaded] = useState(false);
     const [loadError, setLoadError] = useState(false);
@@ -720,11 +727,21 @@ function GifVaultModal({
     async function sendRandomGif() {
         if (!randomGif) return;
         try {
-            sendMessage(channelId, { content: await getGifUrl(randomGif) });
+            const reply = PendingReplyStore.getPendingReply(channelId);
+            await sendMessage(
+                channelId,
+                { content: await getGifUrl(randomGif) },
+                false,
+                MessageActions.getSendMessageOptionsForReply(reply),
+            );
+            if (reply) FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
             modalProps.onClose();
         } catch (error) {
             logger.error("Failed to send a favorite GIF", error);
-            setLoadError(true);
+            showToast({
+                text: "Failed to send the GIF. Check the Vencord console for details.",
+                variant: "critical",
+            });
         }
     }
 
@@ -983,7 +1000,7 @@ function GifVaultModal({
                                     onClick={sendRandomGif}
                                     disabled={!randomGif}
                                 >
-                                    Send to chat
+                                    {pendingReply ? "Send as reply" : "Send to chat"}
                                 </Button>
                             </div>
                         </div>
