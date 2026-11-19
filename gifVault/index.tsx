@@ -7,12 +7,13 @@
 import "./styles.css";
 
 import * as DataStore from "@api/DataStore";
+import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Paragraph } from "@components/Paragraph";
 import { confirmAction, sendMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 import { RenderModalProps } from "@vencord/discord-types";
 import {
     FluxDispatcher,
@@ -41,6 +42,17 @@ const logger = new Logger("GifVault");
 const DATA_KEY = "GifVault_library";
 const UNFILED = "Unfiled";
 const BACKUP_VERSION = 1;
+const DEFAULT_OPEN_KEYBIND = "Ctrl+Shift+G";
+
+const settings = definePluginSettings({
+    openMenuKeybind: {
+        type: OptionType.STRING,
+        displayName: "Open menu keybind",
+        description: "Keyboard shortcut to open GIF Vault, for example Ctrl+Shift+G.",
+        default: DEFAULT_OPEN_KEYBIND,
+        isValid: value => typeof value === "string" && !!getKeybindModifiers(value),
+    },
+});
 
 const TILE_SIZES = {
     small: { label: "Small", minWidth: 202, rowHeight: 222 },
@@ -58,6 +70,77 @@ function isGifSortOrder(value: string): value is GifSortOrder {
         value === "title-asc" ||
         value === "title-desc"
     );
+}
+
+function getKeybindModifiers(value: string) {
+    const parts = value
+        .split("+")
+        .map(part => part.trim().toLocaleLowerCase())
+        .filter(Boolean);
+    if (!parts.length) return;
+
+    const modifiers = {
+        ctrl: false,
+        alt: false,
+        shift: false,
+        meta: false,
+    };
+    let key: string | undefined;
+    for (const part of parts) {
+        switch (part) {
+            case "ctrl":
+            case "control":
+                if (modifiers.ctrl) return;
+                modifiers.ctrl = true;
+                break;
+            case "alt":
+                if (modifiers.alt) return;
+                modifiers.alt = true;
+                break;
+            case "shift":
+                if (modifiers.shift) return;
+                modifiers.shift = true;
+                break;
+            case "meta":
+            case "cmd":
+            case "command":
+                if (modifiers.meta) return;
+                modifiers.meta = true;
+                break;
+            default:
+                if (key) return;
+                key = part;
+        }
+    }
+
+    if (!key || ["ctrl", "control", "alt", "shift", "meta", "cmd", "command"].includes(key))
+        return;
+    return { ...modifiers, key };
+}
+
+function onKeydown(event: KeyboardEvent) {
+    if (event.repeat || document.querySelector(".vc-gif-vault")) return;
+    const { key: pressedKey, ctrlKey, altKey, shiftKey, metaKey, target } = event;
+    const keybind = getKeybindModifiers(settings.store.openMenuKeybind);
+    if (!keybind) return;
+    const { key: configuredKey, ctrl, alt, shift, meta } = keybind;
+    if (pressedKey.toLocaleLowerCase() !== configuredKey) return;
+    if (
+        ctrlKey !== ctrl ||
+        altKey !== alt ||
+        shiftKey !== shift ||
+        metaKey !== meta
+    )
+        return;
+
+    if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.closest("input, textarea, select, [role='textbox']"))
+    )
+        return;
+
+    event.preventDefault();
+    openGifVault();
 }
 
 interface FavoriteGif {
@@ -586,7 +669,8 @@ function GifVaultModal({
     const [loadError, setLoadError] = useState(false);
     const [search, setSearch] = useState("");
     const [folderFilter, setFolderFilter] = useState("");
-    const [sortOrder, setSortOrder] = useState<GifSortOrder>("added-oldest");
+    const [sortOrder, setSortOrder] = useState<GifSortOrder>("added-newest");
+    const [maximized, setMaximized] = useState(false);
     const [newFolder, setNewFolder] = useState("");
     const [editingFolder, setEditingFolder] = useState<string>();
     const [folderNameDraft, setFolderNameDraft] = useState("");
@@ -596,6 +680,65 @@ function GifVaultModal({
     const [saving, setSaving] = useState(false);
     const [columns, setColumns] = useState(5);
     const gridRef = useRef<HTMLDivElement>(null);
+    const vaultRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!maximized) return;
+
+        const modalContent = vaultRef.current?.parentElement;
+        if (!modalContent) return;
+
+        const maxWidth = window.innerWidth * 0.95;
+        const maxHeight = window.innerHeight * 0.95;
+        const originalStyles = new Map<
+            HTMLElement,
+            Map<string, { value: string; priority: string }>
+        >();
+        for (
+            let element: HTMLElement | null = modalContent;
+            element && element !== document.body;
+            element = element.parentElement
+        ) {
+            const bounds = element.getBoundingClientRect();
+            const resizeWidth = bounds.width < maxWidth;
+            const resizeHeight = bounds.height < maxHeight;
+            if (!resizeWidth && !resizeHeight) continue;
+
+            const properties = [
+                ...(resizeWidth ? ["width", "max-width"] : []),
+                ...(resizeHeight ? ["height", "max-height"] : []),
+            ];
+            originalStyles.set(
+                element,
+                new Map(
+                    properties.map(property => [
+                        property,
+                        {
+                            value: element.style.getPropertyValue(property),
+                            priority: element.style.getPropertyPriority(property),
+                        },
+                    ]),
+                ),
+            );
+            if (resizeWidth) {
+                element.style.setProperty("width", "95vw", "important");
+                element.style.setProperty("max-width", "95vw", "important");
+            }
+            if (resizeHeight) {
+                element.style.setProperty("height", "95vh", "important");
+                element.style.setProperty("max-height", "95vh", "important");
+            }
+        }
+
+        return () => {
+            for (const [element, styles] of originalStyles) {
+                for (const [property, { value, priority }] of styles) {
+                    if (value) element.style.setProperty(property, value, priority);
+                    else element.style.removeProperty(property);
+                }
+            }
+        };
+    }, [maximized]);
 
     useEffect(() => {
         let cancelled = false;
@@ -938,11 +1081,27 @@ function GifVaultModal({
     return (
         <Modal
             {...modalProps}
-            title="GIF Vault"
-            size="xl"
+            title={
+                <div className="vc-gif-vault-modalTitle">
+                    <span>GIF Vault</span>
+                    <button
+                        type="button"
+                        className="vc-gif-vault-maximizeButton"
+                        aria-label={maximized ? "Restore GIF Vault size" : "Maximize GIF Vault"}
+                        aria-pressed={maximized}
+                        onClick={() => setMaximized(value => !value)}
+                    >
+                        {maximized ? "Restore" : "Maximize"}
+                    </button>
+                </div>
+            }
+            size={maximized ? "xxl" : "xl"}
             actions={[{ text: "Done", variant: "secondary", onClick: modalProps.onClose }]}
         >
-            <div className={`vc-gif-vault vc-gif-vault-${library.layoutSize}`}>
+            <div
+                ref={vaultRef}
+                className={`vc-gif-vault vc-gif-vault-${library.layoutSize}${maximized ? " vc-gif-vault-maximized" : ""}`}
+            >
                 {loadError && (
                     <div className="vc-gif-vault-notice" role="alert">
                         Some GIF Vault data could not be loaded or saved. Check the Vencord console
@@ -1072,8 +1231,8 @@ function GifVaultModal({
                                 value={sortOrder}
                                 placeholder="Sort favorites"
                                 options={[
-                                    { label: "Oldest added", value: "added-oldest" },
                                     { label: "Newest added", value: "added-newest" },
+                                    { label: "Oldest added", value: "added-oldest" },
                                     { label: "Title A–Z", value: "title-asc" },
                                     { label: "Title Z–A", value: "title-desc" },
                                 ]}
@@ -1274,7 +1433,16 @@ export default definePlugin({
     description:
         "Organize favorite GIFs into folders, search them, and preview random favorites before posting.",
     authors: [author],
+    settings,
     settingsAboutComponent: GifVaultBackupSettings,
+
+    start() {
+        document.addEventListener("keydown", onKeydown);
+    },
+
+    stop() {
+        document.removeEventListener("keydown", onKeydown);
+    },
 
     patches: [
         {

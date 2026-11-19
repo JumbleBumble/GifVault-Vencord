@@ -3,6 +3,29 @@
     margin-left: 8px;
 }
 
+.vc-gif-vault-modalTitle {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+}
+
+.vc-gif-vault-maximizeButton {
+    background: var(--background-tertiary);
+    border: 0;
+    border-radius: 4px;
+    color: var(--interactive-normal);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 5px 8px;
+}
+
+.vc-gif-vault-maximizeButton:hover {
+    background: var(--background-modifier-hover);
+    color: var(--interactive-hover);
+}
+
 .vc-gif-vault {
     box-sizing: border-box;
     --vc-gif-vault-row-height: 222px;
@@ -14,6 +37,11 @@
     min-height: min(340px, calc(100vh - 220px));
     overflow: hidden;
     padding: 2px;
+}
+
+.vc-gif-vault-maximized {
+    height: calc(95vh - 160px);
+    min-height: 0;
 }
 
 .vc-gif-vault-medium {
@@ -521,6 +549,11 @@
     .vc-gif-vault {
         height: min(52vh, 500px, calc(100vh - 220px));
         min-height: min(280px, calc(100vh - 220px));
+    }
+
+    .vc-gif-vault.vc-gif-vault-maximized {
+        height: calc(95vh - 160px);
+        min-height: 0;
     }
 
     .vc-gif-vault-libraryHeading {
