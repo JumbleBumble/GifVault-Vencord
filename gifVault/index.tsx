@@ -679,6 +679,7 @@ function GifVaultModal({
     const [randomGif, setRandomGif] = useState<FavoriteGif>();
     const [saving, setSaving] = useState(false);
     const [columns, setColumns] = useState(5);
+    const [gridHeight, setGridHeight] = useState(0);
     const gridRef = useRef<HTMLDivElement>(null);
     const vaultRef = useRef<HTMLDivElement>(null);
 
@@ -828,14 +829,20 @@ function GifVaultModal({
         if (!node) return;
 
         const observer = new ResizeObserver(() => {
+            const nextHeight = node.clientHeight;
+            setGridHeight(current => (current === nextHeight ? current : nextHeight));
+
             const nextColumns =
-                library.layoutSize === "large"
+                library.layoutSize === "large" && !maximized
                     ? 2
                     : Math.max(
                           1,
                           Math.min(
                               5,
-                              Math.floor((node.clientWidth + 12) / (tileSize.minWidth + 12)),
+                              Math.floor(
+                                  (node.clientWidth + 12) /
+                                      (tileSize.minWidth * (maximized ? 1.5 : 1) + 12),
+                              ),
                           ),
                       );
             setColumns((current) => (current === nextColumns ? current : nextColumns));
@@ -843,7 +850,10 @@ function GifVaultModal({
         observer.observe(node);
 
         return () => observer.disconnect();
-    }, [loaded, filteredGifs.length > 0, library.layoutSize]);
+    }, [loaded, filteredGifs.length > 0, library.layoutSize, maximized]);
+    const rowHeight = maximized
+        ? Math.min(tileSize.rowHeight * 1.5, gridHeight || tileSize.rowHeight * 1.5)
+        : tileSize.rowHeight;
 
     async function saveLibrary(next: GifLibraryData) {
         setSaving(true);
@@ -1353,7 +1363,7 @@ function GifVaultModal({
                                 innerClassName="vc-gif-vault-gridContent"
                                 sections={[gifRows.length]}
                                 sectionHeight={0}
-                                rowHeight={tileSize.rowHeight}
+                                rowHeight={rowHeight}
                                 chunkSize={chunkSize}
                                 paddingTop={0}
                                 paddingBottom={0}
@@ -1366,6 +1376,7 @@ function GifVaultModal({
                                         className="vc-gif-vault-gridRow"
                                         style={{
                                             gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                                            height: maximized ? rowHeight : undefined,
                                         }}
                                     >
                                         {gifRows[row].map((gif) => (
