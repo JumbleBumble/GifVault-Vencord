@@ -567,6 +567,23 @@
     gap: 8px;
 }
 
+.vc-gif-vault-exportProgress {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+}
+
+.vc-gif-vault-exportProgress progress {
+    accent-color: var(--brand-500);
+    flex: 1;
+    min-width: 100px;
+}
+
+.vc-gif-vault-exportProgress span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 @media (max-width: 700px) {
     .vc-gif-vault {
         height: min(52vh, 500px, calc(100vh - 220px));
