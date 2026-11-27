@@ -23,6 +23,7 @@ Open Discord's GIF picker, switch to **Favorites**, and select **Organize favori
 ### Organize and browse
 
 - Create, rename, and delete folders, then assign a GIF to one or more folders.
+- Reorder folders by dragging their tabs.
 - Filter favorites with **All**, **Unfiled**, and folder tabs.
 - Set and rename custom GIF titles.
 - Search GIF favorites by custom title or source URL.

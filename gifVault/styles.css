@@ -11,14 +11,29 @@
 }
 
 .vc-gif-vault-maximizeButton {
+    align-items: center;
     background: var(--background-tertiary);
     border: 0;
     border-radius: 4px;
     color: var(--interactive-normal);
     cursor: pointer;
+    display: inline-flex;
     font: inherit;
     font-size: 12px;
+    gap: 6px;
     padding: 5px 8px;
+}
+
+.vc-gif-vault-maximizeButton svg,
+.vc-gif-vault-layoutOptions svg {
+    fill: none;
+    flex: none;
+    height: 16px;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+    width: 16px;
 }
 
 .vc-gif-vault-maximizeButton:hover {
@@ -226,14 +241,18 @@
 }
 
 .vc-gif-vault-layoutOptions button {
+    align-items: center;
     background: transparent;
     border: 0;
     border-radius: 4px;
     color: var(--interactive-normal);
     cursor: pointer;
+    display: inline-flex;
     flex-shrink: 0;
     font: inherit;
     font-size: 12px;
+    gap: 6px;
+    justify-content: center;
     min-width: 64px;
     padding: 6px 10px;
     transition:
@@ -331,6 +350,23 @@
     display: inline-flex;
     flex: none;
     overflow: hidden;
+}
+
+.vc-gif-vault-folderTabReorderable {
+    cursor: grab;
+}
+
+.vc-gif-vault-folderTabReorderable:active {
+    cursor: grabbing;
+}
+
+.vc-gif-vault-folderTabDragging {
+    opacity: 0.5;
+}
+
+.vc-gif-vault-folderTabDropTarget {
+    outline: 2px dashed var(--brand-500);
+    outline-offset: 2px;
 }
 
 .vc-gif-vault-folderTab > button {
